@@ -1,11 +1,10 @@
 # Thông Tin Deploy — Checkpoint 5
 
-> Báo cáo triển khai môi trường Cloud thực tế cho AI Agent Service.
-> Toàn bộ dịch vụ được cấu hình theo chuẩn 12-Factor App, chạy trên container bảo mật và kết nối dịch vụ Redis độc lập.
+> Điền file này sau khi deploy xong. `pytest tests/test_cp5.py` đọc file này
+> để tìm địa chỉ service của bạn và gọi thử.
 >
-> **Lưu ý bảo mật:** Chỉ ghi TÊN biến môi trường và nguồn gán giá trị, tuyệt đối không lưu giá trị secret/API key trong tài liệu này.
-
----
+> **Chỉ ghi TÊN biến môi trường, tuyệt đối không dán giá trị API key vào đây.**
+> Repo này công khai — dán khóa vào là mất khóa.
 
 ## Thông Tin Học Viên
 
@@ -13,11 +12,9 @@
 |-----|----------|
 | Họ và tên | Nguyễn Trung Kiên |
 | Mã học viên | 2A202602764 |
-| Repository | https://github.com/kien3007/K4-L3A-DAY12-NguyenTrungKien-2A202602764-CloudServicesAndDeployment |
+| Repo | https://github.com/kien3007/K4-L3A-DAY12-NguyenTrungKien-2A202602764-CloudServicesAndDeployment |
 
----
-
-## Service Trên Cloud
+## Service
 
 | Mục | Nội dung |
 |-----|----------|
@@ -31,43 +28,41 @@
 
 ## Biến Môi Trường Đã Set Trên Cloud
 
-Toàn bộ biến cấu hình và secret được quản lý trong mục **Environment** trên Render Dashboard:
+Ghi tên biến và **nguồn giá trị**, không ghi giá trị:
 
-| Biến môi trường | Đã set | Nguồn giá trị / Ghi chú |
-|-----------------|:------:|-------------------------|
-| `PORT` | ✅ | Platform Render tự động cấp phát khi khởi tạo container |
-| `AGENT_API_KEY` | ✅ | Tạo bằng `secrets.token_urlsafe(32)`, lưu an toàn trên Render Dashboard |
-| `REDIS_URL` | ✅ | Internal Connection String từ Redis add-on (`day12-redis`) |
-| `RATE_LIMIT_PER_MINUTE` | ✅ | `10` (Giới hạn 10 request/phút theo thuật toán Sliding Window ZSET) |
-| `MONTHLY_BUDGET_USD` | ✅ | `10.0` (Ngân sách tối đa $10/tháng cho mỗi user) |
-| `LOG_LEVEL` | ✅ | `INFO` (Structured JSON logging ra stdout) |
-
----
+| Biến | Đã set | Ghi chú |
+|------|--------|---------|
+| `PORT` | ✅ | platform tự gán |
+| `AGENT_API_KEY` | ✅ | đặt trong dashboard, không nằm trong repo |
+| `REDIS_URL` | ✅ | Redis add-on của platform (day12-redis connectionString) |
+| `RATE_LIMIT_PER_MINUTE` | ✅ | 10 |
+| `MONTHLY_BUDGET_USD` | ✅ | 10.0 |
+| `LOG_LEVEL` | ✅ | INFO |
 
 ## Lệnh Kiểm Tra
 
-### 1. Trên Linux / macOS / Bash
+Thay `<URL>` bằng Public URL ở trên:
 
 ```bash
-# 1. Liveness Probe — mong đợi 200 {"status":"ok"}
+# 1. Liveness — mong đợi 200 {"status":"ok"}
 curl -i https://day12-agent-ycr6.onrender.com/health
 
-# 2. Readiness Probe — mong đợi 200 {"status":"ready"} (đã nối được Redis)
+# 2. Readiness — mong đợi 200 {"status":"ready"} (đã nối được Redis)
 curl -i https://day12-agent-ycr6.onrender.com/ready
 
-# 3. Không có API Key — mong đợi 401 Unauthorized
+# 3. Không có API key — mong đợi 401
 curl -i -X POST https://day12-agent-ycr6.onrender.com/ask \
   -H "Content-Type: application/json" \
   -d '{"question":"Hello"}'
 
-# 4. Có API Key hợp lệ — mong đợi 200 OK kèm câu trả lời
+# 4. Có API key — mong đợi 200 kèm câu trả lời
 curl -i -X POST https://day12-agent-ycr6.onrender.com/ask \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $AGENT_API_KEY" \
   -H "X-User-Id: sv-test" \
-  -d '{"question":"Deploy"}'
+  -d '{"question":"Deploy là gì?"}'
 
-# 5. Kiểm tra Rate Limit — gọi 15 lần liên tiếp (10 lần đầu 200, 5 lần sau 429)
+# 5. Rate limit — gọi 15 lần, những lần cuối phải trả 429
 for i in $(seq 1 15); do
   curl -s -o /dev/null -w "%{http_code} " -X POST https://day12-agent-ycr6.onrender.com/ask \
     -H "Content-Type: application/json" \
@@ -77,77 +72,79 @@ for i in $(seq 1 15); do
 done; echo
 ```
 
-### 2. Trên Windows PowerShell
-
-```powershell
-# 1. Liveness Probe
-curl.exe -i https://day12-agent-ycr6.onrender.com/health
-
-# 2. Readiness Probe
-curl.exe -i https://day12-agent-ycr6.onrender.com/ready
-
-# 3. Không có API Key (Mong đợi 401)
-curl.exe -i -X POST https://day12-agent-ycr6.onrender.com/ask -H "Content-Type: application/json" -d '{\"question\":\"Hello\"}'
-
-# 4. Có API Key hợp lệ (Mong đợi 200 OK)
-curl.exe -i -X POST https://day12-agent-ycr6.onrender.com/ask -H "Content-Type: application/json" -H "X-API-Key: $env:AGENT_API_KEY" -H "X-User-Id: sv-test" -d '{\"question\":\"Deploy\"}'
-
-# 5. Kiểm tra Rate Limit (15 lần gọi liên tiếp)
-1..15 | ForEach-Object { curl.exe -s -o NUL -w "%{http_code} " -X POST https://day12-agent-ycr6.onrender.com/ask -H "Content-Type: application/json" -H "X-API-Key: $env:AGENT_API_KEY" -H "X-User-Id: sv-test" -d '{\"question\":\"test\"}' }; Write-Host ""
-```
-
 ---
 
 ## Kết Quả Chạy Thật
 
-Trích xuất kết quả chạy thực tế từ môi trường máy trạm gọi lên server Render:
+Dán output của các lệnh trên vào đây:
 
-```http
-# 1. Liveness (/health)
+```
+# 1. Liveness
 HTTP/1.1 200 OK
 Date: Mon, 28 Sep 2026 09:20:30 GMT
 Content-Type: application/json
+Transfer-Encoding: chunked
 Connection: keep-alive
+cf-cache-status: DYNAMIC
+rndr-id: 5bcf4ff8-7b89-447f
 Server: cloudflare
+vary: Accept-Encoding
 x-render-origin-server: uvicorn
+CF-RAY: a421ac2daa9391ad-SIN
+alt-svc: h3=":443"; ma=86400
 
 {"status":"ok","service":"day12-agent","version":"1.0.0"}
 ```
 
-```http
-# 2. Readiness (/ready)
+# 2. Readiness
 HTTP/1.1 200 OK
 Date: Mon, 28 Sep 2026 09:20:51 GMT
 Content-Type: application/json
+Transfer-Encoding: chunked
 Connection: keep-alive
+cf-cache-status: DYNAMIC
+rndr-id: d3504177-f4c6-45a6
 Server: cloudflare
+vary: Accept-Encoding
 x-render-origin-server: uvicorn
+CF-RAY: a421acb2dbc0aedc-SIN
+alt-svc: h3=":443"; ma=86400
 
 {"status":"ready","redis":true}
 ```
 
-```http
-# 3. Không có API key (POST /ask)
+# 3. Không có API key
 HTTP/1.1 401 Unauthorized
 Date: Mon, 28 Sep 2026 09:22:52 GMT
 Content-Type: application/json
+Transfer-Encoding: chunked
 Connection: keep-alive
+cf-cache-status: DYNAMIC
+rndr-id: 635b0668-2568-41fb
 Server: cloudflare
+vary: Accept-Encoding
 x-render-origin-server: uvicorn
+CF-RAY: a421afa5ad3af910-SIN
+alt-svc: h3=":443"; ma=86400
 
 {"detail":"invalid or missing API key"}
 ```
 
-```http
-# 4. Có API key hợp lệ (POST /ask)
+# 4. Có API key
 HTTP/1.1 200 OK
-Date: Mon, 28 Sep 2026 09:24:15 GMT
+Date: Mon, 28 Sep 2026 09:52:11 GMT
 Content-Type: application/json
+Transfer-Encoding: chunked
 Connection: keep-alive
+rndr-id: aec43766-b19b-4607
 Server: cloudflare
+vary: Accept-Encoding
 x-render-origin-server: uvicorn
+cf-cache-status: DYNAMIC
+CF-RAY: a421da933cd3ce46-SIN
+alt-svc: h3=":443"; ma=86400
 
-{"answer":"Câu hỏi hay. Deploy thường được giải quyết bằng cách chuẩn hóa môi trường chạy: cùng một image chạy giống nhau ở laptop và trên cloud. (Mình đang nhớ 6 lượt trao đổi trước đó.)","user_id":"anonymous","history_length":6,"cost_usd":4.695e-05,"tokens":{"in":137,"out":44}}
+{"answer":"Ngắn gọn: Deploy la gi phụ thuộc vào ba yếu tố — cấu hình qua biến môi trường, health check để orchestrator biết trạng thái, và giới hạn tài nguyên. (Mình đang nhớ 20 lượt trao đổi trước đó.)","user_id":"sv-test","history_length":20,"cost_usd":9.57e-05,"tokens":{"in":450,"out":47}}(.venv)
 ```
 
 ```text
@@ -155,11 +152,9 @@ x-render-origin-server: uvicorn
 200 200 200 200 200 200 200 200 200 200 429 429 429 429 429
 ```
 
----
+## Ảnh Chụp Màn Hình
 
-## Ảnh Chụp Màn Hình Minh Chứng
+Đặt ảnh trong thư mục `screenshots/`:
 
-Các ảnh minh chứng được lưu trữ trong thư mục `screenshots/` theo đúng quy định:
-
-* `screenshots/dashboard.png` — Trang quản lý Web Service và Redis trên Render Dashboard.
-* `screenshots/health.png` — Kết quả gọi endpoint `/health` trả về mã 200 kèm JSON trạng thái.
+- `screenshots/dashboard.png` — trang quản lý service trên platform
+- `screenshots/health.png` — kết quả gọi `/health` từ trình duyệt hoặc curl
